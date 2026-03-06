@@ -568,10 +568,24 @@ function uploadArticle() {
   console.log('Client:', client, 'Platform:', platform);
   
   if (platform === 'googledocs') {
-    uploadToGoogleDocs(article);
+    downloadArticle(article);
   } else {
     uploadToWordPress(article, client);
   }
+}
+
+function downloadArticle(article) {
+  var h1Match = article.content.match(/<h1[^>]*>([^<]+)<\/h1>/i);
+  var title = h1Match ? h1Match[1].trim() : article.topic;
+  var blob = new Blob([article.content], {type: 'text/html;charset=utf-8'});
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = title.replace(/[^a-zA-Z0-9֐-׿ ]/g, '').trim() + '.html';
+  a.click();
+  article.status = 'uploaded';
+  renderTable();
+  showToast('✅ הקובץ הורד!', 'success');
+  closeModal();
 }
 
 function uploadToGoogleDocs(article) {
