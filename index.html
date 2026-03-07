@@ -411,18 +411,43 @@ function writeArticle(article) {
   return fetch(proxyUrl, {
     method: 'POST',
     headers: {'Content-Type':'application/json','x-api-key':settings.anthropicKey,'anthropic-version':'2023-06-01'},
-    body: JSON.stringify({model:'claude-sonnet-4-5',max_tokens:8000,messages:[{role:'user',content:prompt}]})
+    body: JSON.stringify({model:'claude-opus-4-5',max_tokens:8000,messages:[{role:'user',content:prompt}]})
   }).then(function(r) {
     if (!r.ok) return r.json().then(function(e){throw new Error(e.error&&e.error.message||'שגיאת API');});
-    return r.json();
-  }).then(function(data) {
-    var raw = data.content[0].text;
-    raw = raw.replace(/^```html\s*/i,'').replace(/```\s*$/,'').trim();
-    article.content = raw;
-    article.status = 'done';
-    showToast('✅ ' + article.company + ' — מוכן', 'success');
+    var reader = r.body.getReader();
+    var decoder = new TextDecoder();
+    var fullText = '';
+    function read() {
+      return reader.read().then(function(result) {
+        if (result.done) {
+          fullText = fullText.replace(/^```html\s*/i,'').replace(/```\s*$/,'').trim();
+          article.content = fullText;
+          article.status = 'done';
+          renderTable();
+          showToast('✅ ' + article.company + ' — מוכן', 'success');
+          return;
+        }
+        var chunk = decoder.decode(result.value, {stream: true});
+        var lines = chunk.split('\n');
+        lines.forEach(function(line) {
+          if (line.startsWith('data: ')) {
+            var data = line.slice(6).trim();
+            if (data === '[DONE]') return;
+            try {
+              var parsed = JSON.parse(data);
+              if (parsed.type === 'content_block_delta' && parsed.delta && parsed.delta.text) {
+                fullText += parsed.delta.text;
+              }
+            } catch(e) {}
+          }
+        });
+        return read();
+      });
+    }
+    return read();
   }).catch(function(err) {
     article.status = 'error';
+    renderTable();
     showToast('❌ ' + err.message, 'error');
   });
 }
@@ -663,27 +688,4 @@ function testConnection() {
   if (!settings.anthropicKey) { showToast('הכנס API Key', 'error'); return; }
   showToast('בודק חיבור...', '');
   var proxyUrl = (settings.proxyUrl || 'https://anthropic-proxy.rydigitalmedia65.workers.dev').trim();
-  fetch(proxyUrl, {
-    method:'POST',
-    headers:{'Content-Type':'application/json','x-api-key':settings.anthropicKey,'anthropic-version':'2023-06-01'},
-    body:JSON.stringify({model:'claude-opus-4-5',max_tokens:10,messages:[{role:'user',content:'hi'}]})
-  }).then(function(r) {
-    if (r.ok) { showToast('✅ חיבור תקין!', 'success'); updateApiStatus(); }
-    else return r.json().then(function(e){showToast('❌ ' + (e.error&&e.error.message||'שגיאה'), 'error');});
-  }).catch(function(e){ showToast('❌ ' + e.message, 'error'); });
-}
-
-// TOAST
-function showToast(msg, type) {
-  var c = document.getElementById('toastContainer');
-  var t = document.createElement('div');
-  t.className = 'toast ' + (type||'');
-  t.textContent = msg;
-  c.appendChild(t);
-  setTimeout(function(){t.remove();}, 4000);
-}
-
-init();
-</script>
-</body>
-</html>
+  fetch(
