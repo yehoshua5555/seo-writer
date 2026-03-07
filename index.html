@@ -420,9 +420,11 @@ function writeArticle(article) {
     raw = raw.replace(/^```html\s*/i,'').replace(/```\s*$/,'').trim();
     article.content = raw;
     article.status = 'done';
+    renderTable();
     showToast('✅ ' + article.company + ' — מוכן', 'success');
   }).catch(function(err) {
     article.status = 'error';
+    renderTable();
     showToast('❌ ' + err.message, 'error');
   });
 }
@@ -462,7 +464,7 @@ var MASTER_PROMPT = `התנהג כמומחה בכיר לכתיבת תוכן שי
 
 function buildPrompt(article) {
   var isPremium = (article.articleType === 'premium');
-  var targetWords = isPremium ? article.words : 600;
+  var targetWords = isPremium ? Math.min(article.words, 1000) : 600;
 
   var anchorsText = '';
   if (article.anchors && article.anchors.length > 0) {
@@ -476,7 +478,7 @@ function buildPrompt(article) {
   }
 
   var faqSection = isPremium
-    ? '\n\nחובה — אחרי גוף המאמר הוסף סקשן FAQ קצר:\n<h2>שאלות נפוצות</h2>\n5 שאלות ותשובות קצרות בלבד (2-3 משפטים כל תשובה) בפורמט: <h3>שאלה</h3><p>תשובה</p>\nסך הכל המאמר כולל FAQ חייב להיות בדיוק ' + targetWords + ' מילים — אל תעבור.'
+    ? '\n\nחובה — אחרי גוף המאמר הוסף סקשן FAQ:\n<h2>שאלות נפוצות</h2>\n5 שאלות ותשובות בפורמט: <h3>שאלה</h3><p>תשובה</p>\nהשאלות יהיו רלוונטיות לנושא המאמר.'
     : '\n\nאסור להוסיף סקשן FAQ בסוף המאמר.';
 
   return MASTER_PROMPT + '\n\n---\nפרטי המאמר' + (isPremium ? ' (PREMIUM)' : '') + ':\n' +
