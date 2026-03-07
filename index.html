@@ -113,12 +113,6 @@ input[type="checkbox"]{width:18px;height:18px;accent-color:var(--accent);cursor:
         <input type="text" id="proxyUrl" placeholder="https://anthropic-proxy.xxx.workers.dev" oninput="saveSettings()">
       </div>
     </div>
-    <div class="divider"></div>
-    <div class="section-label">📋 פרומפט כתיבה</div>
-    <div class="field-group">
-      <label>הפרומפט שלך (יוזן לכל מאמר)</label>
-      <textarea id="promptText" rows="8" placeholder="הדבק כאן את הפרומפט שלך..." oninput="saveSettings()"></textarea>
-    </div>
     <div style="margin-top:16px;display:flex;gap:8px;">
       <button class="btn btn-primary" onclick="testConnection()">🔌 בדוק חיבור</button>
       <button class="btn btn-ghost" onclick="togglePanel('settingsPanel')">סגור</button>
@@ -225,6 +219,7 @@ input[type="checkbox"]{width:18px;height:18px;accent-color:var(--accent);cursor:
     <div class="modal-footer">
       <button class="btn btn-success" id="uploadWpBtn" onclick="uploadArticle()">🚀 העלה</button>
       <button class="btn btn-ghost" onclick="copyArticle()">📋 העתק</button>
+      <button class="btn btn-ghost" id="downloadHtmlBtn" onclick="downloadHtml()" style="display:none">⬇️ הורד HTML</button>
       <button class="btn btn-ghost" onclick="rewriteCurrentArticle()">🔄 כתוב מחדש</button>
     </div>
   </div>
@@ -243,7 +238,6 @@ function init() {
   if (!settings.clients) settings.clients = [];
   if (settings.anthropicKey) document.getElementById('anthropicKey').value = settings.anthropicKey;
   if (settings.proxyUrl) document.getElementById('proxyUrl').value = settings.proxyUrl;
-  if (settings.promptText) document.getElementById('promptText').value = settings.promptText;
   renderClientsTable();
   updateApiStatus();
 }
@@ -251,7 +245,6 @@ function init() {
 function saveSettings() {
   settings.anthropicKey = document.getElementById('anthropicKey').value;
   settings.proxyUrl = document.getElementById('proxyUrl').value;
-  settings.promptText = document.getElementById('promptText').value;
   if (!settings.clients) settings.clients = [];
   localStorage.setItem('seowriter_settings', JSON.stringify(settings));
   updateApiStatus();
@@ -418,7 +411,7 @@ function writeArticle(article) {
   return fetch(proxyUrl, {
     method: 'POST',
     headers: {'Content-Type':'application/json','x-api-key':settings.anthropicKey,'anthropic-version':'2023-06-01'},
-    body: JSON.stringify({model:'claude-opus-4-5',max_tokens:8000,messages:[{role:'user',content:prompt}]})
+    body: JSON.stringify({model:'claude-opus-4-5',max_tokens:4000,messages:[{role:'user',content:prompt}]})
   }).then(function(r) {
     if (!r.ok) return r.json().then(function(e){throw new Error(e.error&&e.error.message||'שגיאת API');});
     return r.json();
@@ -434,39 +427,52 @@ function writeArticle(article) {
   });
 }
 
-function buildPremiumPrompt(article) {
-  var base = settings.promptText || '';
-  var anchorsText = '';
-  if (article.anchors && article.anchors.length > 0) {
-    anchorsText = '\nקישורים — שלב על הטקסט המדויק:\n';
-    article.anchors.forEach(function(a) {
-      anchorsText += '- "' + a.text + '" → <a href="' + a.url + '">' + a.text + '</a>\n';
-    });
-  }
+var MASTER_PROMPT = `התנהג כמומחה בכיר לכתיבת תוכן שיווקי המתמחה ב-SEO עם 10+ שנות ניסיון בשוק התחרותי, המכיר לעומק את האלגוריתמים העדכניים של גוגל ואת עקרונות הכתיבה המשכנעת אבל חייב להיות כתיבה טבעית ביותר ידידותי לקורא.
 
-  return base + '\n\n---\nפרטי המאמר (PREMIUM — מאמר מעמיק):\n' +
-    '- נושא: ' + article.topic + '\n' +
-    '- חברה: ' + article.company + '\n' +
-    '- אורך: בדיוק ' + article.words + ' מילים — חובה\n' +
-    '- ביטוי לקידום: ' + article.keyword + ' (' + article.keywordCount + ' חזרות)\n' +
-    '- הנחיות: ' + article.instructions + '\n' +
-    anchorsText + '\n\n' +
-    'כתוב מאמר PREMIUM מעמיק בעברית עם המבנה הבא:\n\n' +
-    '1. <h1> כותרת ראשית עם מילת המפתח\n' +
-    '2. פסקת פתיחה חזקה עם עובדה מפתיעה או סטטיסטיקה\n' +
-    '3. מספר פרקי <h2> עם תוכן מעמיק\n' +
-    '4. לפחות טבלת השוואה אחת ב-HTML (<table>)\n' +
-    '5. לפחות 2-3 סטטיסטיקות עם מקורות (<a href="...">מקור</a>)\n' +
-    '6. קישורים חיצוניים לאתרים אמינים (Wikipedia, מחקרים, ממשלה)\n' +
-    '7. בסוף — סקשן FAQ עם <h2>שאלות נפוצות</h2> ולפחות 4 שאלות ותשובות בפורמט <h3>שאלה</h3><p>תשובה</p>\n' +
-    '8. סיכום עם <h2>סיכום</h2>\n\n' +
-    'חובה — HTML נקי בלבד. אסור Markdown.\n' +
-    'פורמט: <h1><h2><h3><p><ul><li><strong><table><tr><td><a href>';
-}
+לפני תחילת הכתיבה - בצע ניתוח ראשוני:
+- מה המשתמש באמת מחפש כשהוא מקליד את מילות המפתח הללו?
+- האם הוא מחפש מידע כללי, רשימת מקומות, השוואה, מדריך מעשי או משהו אחר?
+- איזה סוג תוכן יעזור למשתמש?
+- מה יהיה המבנה הכללי של המאמר?
+- איזה זווית ייחודית תיתן למאמר?
+
+עקרונות כתיבה חובה:
+1. אסור לשימוש ברשימות נקודות באמצע פרוזה — כתוב פסקה שמתארת איך הדברים עובדים במציאות.
+2. תמיד ספר סיפור או תן דוגמה — במקום "ספק טוב נותן שירות מהיר", כתוב "חשבו על הרגע שהמכונה נתקעת באמצע יום עבודה - ספק טוב יענה בטלפון ויגיע תוך שעתיים עם חלק החילוף".
+3. הימנע מכתיבה "בסגנון מצגת" — אין "יתרונות:", "חסרונות:", רשימות עם כוכביות.
+4. כל פסקה צריכה לזרום טבעית לבאה אחריה.
+5. השתמש בשפה יומיומית ודוגמאות מהחיים.
+6. אם חייב רשימה — השתמש בה רק בסוף קטע כסיכום, לא באמצע הסבר.
+
+פתיחה מושכת — חובה:
+- התחל עם מצב שכל קורא יכול להזדהות איתו
+- תאר את הבעיה האמיתית שהקורא מתמודד איתה
+- השתמש בשפה ישירה ובגוף שני ("אתם", "כולכם")
+- הבטח פתרון קונקרטי לבעיה
+- כלול את מילת המפתח הראשית באופן טבעי בפסקה הראשונה
+
+אסור בפתיחה:
+- סיפורים על דמויות בדיוניות
+- נתונים מומצאים או סטטיסטיקות לא מאומתות
+- "מקרי בוחן" מומצאים
+
+מבנה לוגי וזרימה:
+- כל כותרת H2 מובילה בצורה טבעית לכותרת הבאה
+- צור מעברים חלקים — "כעת שהבנו את X, בואו נבחן את Y"
+- כל פרק עונה על שאלה ספציפית ומוביל לשאלה הבאה
+
+אל תחפש, תציג או תמציא סטטיסטיקות או נתונים. התמקד בערך התוכן עצמו.
+
+צפיפות מילות מפתח: 1%-1.5% מסך המילים. אסור keyword stuffing.
+
+עמידה בתקני EEAT — מומחיות, סמכות, אמינות, ניסיון.
+
+כתוב את המאמר המלא עכשיו בעברית. אל תמתין לאישור. אל תציג תוכנית. אל תשאל שאלות.`;
 
 function buildPrompt(article) {
-  if (article.articleType === 'premium') return buildPremiumPrompt(article);
-  var base = settings.promptText || '';
+  var isPremium = (article.articleType === 'premium');
+  var targetWords = isPremium ? article.words : 600;
+
   var anchorsText = '';
   if (article.anchors && article.anchors.length > 0) {
     anchorsText = '\nקישורים ואנקור טקסט — שלב אותם על הטקסט המדויק:\n';
@@ -478,23 +484,39 @@ function buildPrompt(article) {
     anchorsText = '\n- אין קישורים פנימיים לשלב.';
   }
 
-  return base + '\n\n---\nפרטי המאמר:\n' +
-    '- נושא / מילת מפתח: ' + article.topic + '\n' +
-    '- חברה: ' + article.company + '\n' +
-    '- אורך: בדיוק ' + article.words + ' מילים — חובה לעמוד ביעד\n' +
+  var faqSection = isPremium
+    ? '\n\nחובה — הוסף בסוף סקשן FAQ:\n<h2>שאלות נפוצות</h2>\n10 שאלות ותשובות בפורמט: <h3>שאלה</h3><p>תשובה</p>\nהשאלות יהיו רלוונטיות לנושא המאמר.'
+    : '\n\nאסור להוסיף סקשן FAQ בסוף המאמר.';
+
+  return MASTER_PROMPT + '\n\n---\nפרטי המאמר' + (isPremium ? ' (PREMIUM)' : '') + ':\n' +
+    '- נושא / מילת מפתח ראשית: ' + article.topic + '\n' +
+    '- חברה / מותג: ' + article.company + '\n' +
+    '- אורך: בדיוק ' + targetWords + ' מילים — חובה לעמוד ביעד\n' +
     '- ביטוי לקידום: ' + article.keyword + '\n' +
     '- כמות חזרות: ' + article.keywordCount + '\n' +
-    '- הנחיות: ' + article.instructions + '\n' +
-    anchorsText + '\n\n' +
-    'כתוב את המאמר המלא עכשיו בעברית. אל תמתין לאישור.\n\n' +
-    'חובה — פורמט HTML בלבד:\n' +
+    '- הנחיות נוספות: ' + (article.instructions || 'אין') + '\n' +
+    anchorsText +
+    faqSection + '\n\n' +
+    'חובה — פורמט HTML נקי בלבד. אסור Markdown.\n' +
     '<h1> לכותרת ראשית\n' +
     '<h2> <h3> לכותרות משנה\n' +
     '<p> לפסקאות\n' +
-    '<ul><li> לרשימות\n' +
+    '<ul><li> לרשימות בלבד כשנדרש\n' +
     '<strong> להדגשה\n' +
-    '<a href="...">טקסט</a> לקישורים\n' +
-    'אסור Markdown. HTML נקי בלבד.';
+    '<a href="...">טקסט</a> לקישורים';
+}
+
+function downloadHtml() {
+  var article = articles.find(function(a){return a.id===currentArticleIndex;});
+  if (!article || !article.content) return;
+  var blob = new Blob([article.content], {type:'text/html;charset=utf-8'});
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url;
+  a.download = (article.company + '_' + article.topic).replace(/[^א-תa-zA-Z0-9_]/g,'_').substring(0,60) + '.html';
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('✅ קובץ HTML הורד', 'success');
 }
 
 // MODAL
@@ -509,6 +531,7 @@ function openModal(id) {
   document.getElementById('modalWpUrl').value = client ? client.url : '';
   document.getElementById('modalWpUser').value = client ? client.user : '';
   document.getElementById('modalWpPass').value = client ? client.pass : '';
+  document.getElementById('downloadHtmlBtn').style.display = (article.articleType !== 'premium') ? 'inline-flex' : 'none';
   isEditing = false;
   document.getElementById('articlePreview').style.display = 'block';
   document.getElementById('articleEdit').style.display = 'none';
@@ -550,42 +573,24 @@ function rewriteCurrentArticle() {
 }
 
 // WORDPRESS
-
+var GOOGLE_DOCS_URL = (settings.proxyUrl || 'https://anthropic-proxy.rydigitalmedia65.workers.dev').trim() + '/gdocs';
 
 function uploadArticle() {
   var article = articles.find(function(a){return a.id===currentArticleIndex;});
   var client = getClientByCompany(article.company);
-  
+  // Check platform - also check if WordPress URL field contains 'googledocs' text
   var platform = 'wordpress';
   if (client) {
-    if (client.platform === 'googledocs') {
-      platform = 'googledocs';
-    } else if (!client.url && !client.user && !client.pass) {
-      platform = 'googledocs';
-    }
+    if (client.platform === 'googledocs') platform = 'googledocs';
+    else if (!client.platform && !client.url && !client.user && !client.pass) platform = 'googledocs';
+    else platform = client.platform || 'wordpress';
   }
-  
-  console.log('Client:', client, 'Platform:', platform);
-  
+
   if (platform === 'googledocs') {
-    downloadArticle(article);
+    uploadToGoogleDocs(article);
   } else {
     uploadToWordPress(article, client);
   }
-}
-
-function downloadArticle(article) {
-  var h1Match = article.content.match(/<h1[^>]*>([^<]+)<\/h1>/i);
-  var title = h1Match ? h1Match[1].trim() : article.topic;
-  var blob = new Blob([article.content], {type: 'text/html;charset=utf-8'});
-  var a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = title.replace(/[^a-zA-Z0-9֐-׿ ]/g, '').trim() + '.html';
-  a.click();
-  article.status = 'uploaded';
-  renderTable();
-  showToast('✅ הקובץ הורד!', 'success');
-  closeModal();
 }
 
 function uploadToGoogleDocs(article) {
@@ -596,8 +601,7 @@ function uploadToGoogleDocs(article) {
   var h1Match = article.content.match(/<h1[^>]*>([^<]+)<\/h1>/i);
   var title = h1Match ? h1Match[1].trim() : article.topic;
 
-  var gdocsUrl = (settings.proxyUrl || 'https://anthropic-proxy.rydigitalmedia65.workers.dev').trim().replace(/\/$/, '') + '/gdocs';
-  fetch(gdocsUrl, {
+  fetch(GOOGLE_DOCS_URL, {
     method: 'POST',
     body: JSON.stringify({title: title, content: article.content})
   }).then(function(r){ return r.json(); })
