@@ -411,7 +411,7 @@ function writeArticle(article) {
   return fetch(proxyUrl, {
     method: 'POST',
     headers: {'Content-Type':'application/json','x-api-key':settings.anthropicKey,'anthropic-version':'2023-06-01'},
-    body: JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:5000,messages:[{role:'user',content:prompt}]})
+    body: JSON.stringify({model:'claude-sonnet-4-5',max_tokens:8000,messages:[{role:'user',content:prompt}]})
   }).then(function(r) {
     if (!r.ok) return r.json().then(function(e){throw new Error(e.error&&e.error.message||'שגיאת API');});
     return r.json();
